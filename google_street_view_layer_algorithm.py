@@ -33,6 +33,9 @@ __revision__ = '$Format:%H$'
 from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import (QgsProcessing,
                        QgsFeatureSink,
+                       QgsProcessingParameterField,
+                       QgsProcessingParameterString,
+                       QgsProcessingParameterBoolean,
                        QgsProcessingAlgorithm,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterFeatureSink)
@@ -58,6 +61,9 @@ class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
 
     OUTPUT = 'OUTPUT'
     INPUT = 'INPUT'
+    JOINABLE_FIELD_NAME = 'joinable_field_name'
+    API_KEY = 'API_Key'
+    DISCLAIMER = 'disclaimer'
 
     def initAlgorithm(self, config):
         """
@@ -70,8 +76,34 @@ class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterFeatureSource(
                 self.INPUT,
-                self.tr('Input layer'),
-                [QgsProcessing.TypeVectorAnyGeometry]
+                self.tr('Road layer (line geometry)'),
+                [QgsProcessing.TypeVectorLine]
+            )
+        )
+
+        self.addParameter(QgsProcessingParameterField(self.JOINABLE_FIELD_NAME,
+                                                      'Choose joinable field (Choose a field with unique values)',
+                                                      # type=QgsProcessingParameterField.Numeric,
+                                                      parentLayerParameterName=self.INPUT))
+
+        self.addParameter(QgsProcessingParameterString(
+            self.API_KEY,
+            self.tr('Google API Key'), ' '
+        ))
+
+        self.addParameter(
+            QgsProcessingParameterBoolean(
+                self.DISCLAIMER,
+                self.tr("""WARNING: 
+An API call will be used to validate the API key 
+and then for every feature or selected feature in 
+the chosen layer. You may incur use charges from 
+Google. See your Google API agreement for 
+details.
+The developer of this tool bears no responsibility 
+for such charges. Check here if you understand 
+and can legally consent to Google's charges to 
+continue."""), 0
             )
         )
 
