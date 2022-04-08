@@ -35,12 +35,13 @@ import requests
 import json
 
 from PyQt5.QtCore import QVariant
+from PyQt5.QtWidgets import QMessageBox
 from qgis import processing
 from qgis.gui import QgsMessageBar
 from qgis.PyQt.QtCore import QCoreApplication
 from qgis._core import QgsProperty, QgsProcessingParameterEnum, QgsCoordinateReferenceSystem, QgsField, \
     QgsProcessingParameterVectorLayer, QgsProject, QgsFeatureRequest, QgsProcessingParameterVectorDestination, \
-    QgsVectorLayer
+    QgsVectorLayer, QgsGeometry, QgsPointXY
 from qgis.core import (Qgis,
                        QgsProcessing,
                        QgsFeatureSink,
@@ -74,6 +75,15 @@ class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
 
     INPUT = None
     ##############
+    # Testing mode set to 1 will:
+    # - Print to the console the process functions being accessed, and important variable values along the way.
+    # - Unless a valid API key is entered, will assume anything entered under 39 characters is initially valid; if
+    # key given is invalid, the status on the calls will always be REQUEST DENIED. A valid key may be used during
+    # testing and will make legitimate API calls that could result in charges from Google; a very small sample layer is
+    # strongly suggested; USE WITH CAUTION!
+
+    # Testing mode set to 0 will let the plugin operate as expected.
+
     testing = 1
     OUTPUT_TYPE = 'output type'
     FIELD_NAME = 'field_name'
@@ -103,7 +113,8 @@ class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
                 self.tr('Choose output preference:'),
                 options=[
                     'Duplicate road layer with amended attributes',
-                    'Joinable table using a unique values field'
+                    'Joinable point layer adjusted to Street View location',
+                    'Joinable table (requires table-ready output format)'
                 ],
                 allowMultiple=False, defaultValue=None
             )
@@ -111,7 +122,7 @@ class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
 
         field_name = QgsProcessingParameterField(
                 self.FIELD_NAME,
-                'Choose a field with unique values. Joinable tables will share this field.',
+                'Choose a field with unique values.',
                 parentLayerParameterName=self.INPUT
             )
         self.addParameter(field_name)
@@ -168,11 +179,29 @@ continue."""), 0
         # Create layer from source so processes can read it.
         layer = source.materialize(QgsFeatureRequest())
 
+        self.print(f"""
+        source: {source}
+        output_type: {output_type}
+        field_name: {field_name}
+        api_key: {api_key}
+        disclaimer: {disclaimer}
+        layer: {layer}
+        """)
+
         source = self.run_process(layer, output_type, field_name, api_key, disclaimer)
-        ###############
+
+        # This is to catch invalid CRS on table outputs. Layer CRS outputs should end up being the same otherwise.
+        if source.sourceCrs() != layer.crs():
+            crs = QgsCoordinateReferenceSystem("EPSG:4326")
+        else:
+            crs = layer.crs()
 
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
-                context, source.fields(), source.wkbType(), source.sourceCrs())
+                                               context, source.fields(), source.wkbType(), crs)
+        ###############
+
+        # (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT,
+        #         context, source.fields(), source.wkbType(), source.sourceCrs())
 
         # Compute the number of steps to display within the progress bar and
         # get features from source
@@ -196,6 +225,8 @@ continue."""), 0
         # statistics, etc. These should all be included in the returned
         # dictionary, with keys matching the feature corresponding parameter
         # or output names.
+
+        print('Sending to selected destination.')
         return {self.OUTPUT: dest_id}
 
     def name(self):
@@ -247,8 +278,22 @@ continue."""), 0
             print(msg)
 
     def warning(self, msg):
-        qgis.utils.iface.messageBar().pushMessage("ATTENTION", msg, level=1, duration=10)
+        self.msgbox(title='ATTENTION', icon=QMessageBox.Warning, text=msg)
         print(msg)
+
+    def msgbox(self, title=None, icon=None, text=None, info=None):
+        msg = QMessageBox()
+        if title:
+            msg.setWindowTitle(title)
+        if icon:
+            # Options: QMessageBox.Question, Information, Warning, Critical
+            msg.setIcon(icon)
+        if text:
+            msg.setText(text)
+        if info:
+            msg.setInformativeText(info)
+        msg.setStandardButtons(QMessageBox.Ok)  # msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.exec_()
 
     def get_field(self, input_layer, field_name):
         field_idx = input_layer.fields().indexFromName(field_name)
@@ -273,30 +318,33 @@ continue."""), 0
         if disclaimer != 1:
             self.warning('You must acknowledge and consent to the disclaimer to continue!')
         else:
-            valid_api_key = self.validate_api_key(api_key, force_true=1)
+            valid_api_key = self.validate_api_key(api_key)
 
             if valid_api_key != 1:
                 self.warning('Invalid API key! Please provide a valid API key.')
             else:
                 self.print('Key is valid!')
-                resume = True
-                # If not creating a new layer, strip the fields down to selected join field
-                # 0    'Duplicate road layer with amended attributes',
-                # 1    'Joinable table using a unique values field'
 
-                if output_type == 1:
-                    field_validated = self.check_for_unique_values(layer, field_name)
-                    self.print(f'field_validated = {field_validated}')
-                    if field_validated:
+                field_validated = self.check_for_unique_values(layer, field_name)
+                self.print(f'field_validated = {field_validated}')
+
+                if field_validated:
+                    resume = True
+                else:
+                    self.warning('Selected field does not contain unique values.')
+                    resume = False
+
+                if resume:
+                    # If not creating a duplicate layer, strip the fields down to selected join field
+                    # 0     'Duplicate road layer with amended attributes',
+                    # 1     'Joinable point layer'
+                    # 2     'Joinable table'
+                    if output_type > 0:
                         reduced_fields_layer = self.reduce_fields(layer, field_name)
                         local_input = reduced_fields_layer
                     else:
-                        self.warning('Selected field does not contain unique values.')
-                        resume = False
-                else:
-                    local_input = layer
+                        local_input = layer
 
-                if resume:
                     # Create midpoints layer from local_input
                     midpoints_layer = self.create_midpoints_layer(local_input)
 
@@ -310,31 +358,36 @@ continue."""), 0
                     gsv_layer = self.add_gsv_fields(geom_added_layer)
 
                     # Add GSV data
-                    self.populate_gsv_fields(gsv_layer)
+                    self.populate_gsv_fields(gsv_layer, api_key)
                     gsv_layer.setName('GSV_layer')
 
-                    if output_type == 0:
-                        combined_layer = self.join_to_duplicate_source(source_layer=layer, input_layer=gsv_layer, field_name=field_name)
+                    if output_type == 0:  # Duplicated roads layer with added GSV data
+                        combined_layer = self.join_to_duplicate_source(source_layer=layer, input_layer=gsv_layer, joining_field_name=field_name)
                         return combined_layer
-                    if output_type == 1:
+                    if output_type == 1:  # GSV point layer
+                        return gsv_layer
+                    if output_type == 2:  # GSV table only
                         table = self.export_table(gsv_layer)
                         return table
 
-    def validate_api_key(self, api_key, force_true=0):
-        # From https://www.askpython.com/python/examples/pull-data-from-an-api
+    def validate_api_key(self, api_key):
+        # This uses an Street View API call at 0,0 to either validate the key and continue the process, or save the
+        # trouble and stop the process. If testing mode is on, this will return any key value entered is valid, but if
+        # invalid, Google will deny the calls.
+        # Derived from https://www.askpython.com/python/examples/pull-data-from-an-api
         # Two possible outcomes:
         # Valid: "status" : "ZERO_RESULTS"
         # Invalid: "status" : "REQUEST_DENIED"
 
-        if force_true == 1:
+        if len(api_key) < 39 and self.testing == 1:
             return 1
-        elif len(api_key) < 29:
-            return 0
         else:
             req = f'https://maps.googleapis.com/maps/api/streetview/metadata?location=0,0&key={api_key}'
 
             json_returned = self.get_gsv_json(req)
             status = json_returned['status']
+
+            self.print(status)
 
             if status == 'REQUEST_DENIED':
                 return 0
@@ -429,6 +482,8 @@ continue."""), 0
         self.print(f'Adding gsv fields.')
         layer_dp = input_layer.dataProvider()
         layer_dp.addAttributes([
+            QgsField("gsv_lat", QVariant.Double),
+            QgsField("gsv_lng", QVariant.Double),
             QgsField("gsv_url", QVariant.String),
             QgsField("gsv_status", QVariant.String),
             QgsField("gsv_date", QVariant.String),
@@ -441,7 +496,7 @@ continue."""), 0
 
         return input_layer
 
-    def populate_gsv_fields(self, layer):
+    def populate_gsv_fields(self, layer, api_key):
         self.print('Populating GSV fields')
 
         layer.startEditing()
@@ -451,7 +506,8 @@ continue."""), 0
         # Populate GSV fields
         features = layer.getFeatures('1=1')
         for feature in features:
-            api_url = self.build_url(y=feature['ycoord'], x=feature['xcoord'])
+            # Stop the algorithm if cancel button has been clicked
+            api_url = self.build_url(api_key, y=feature['ycoord'], x=feature['xcoord'])
 
             json_returned = self.get_gsv_json(api_url)
             feature['gsv_json'] = f'{json_returned}'
@@ -459,8 +515,11 @@ continue."""), 0
             feature['gsv_status'] = json_returned['status']
 
             if json_returned['status'] == 'OK':
+                feature['gsv_lat'] = json_returned['location']['lat']
+                feature['gsv_lng'] = json_returned['location']['lng']
                 feature['gsv_date'] = json_returned['date']
                 feature['pano_id'] = json_returned['pano_id']
+                feature.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(json_returned['location']['lng'], json_returned['location']['lat'])))
 
                 # We DON'T want the api_url being in the data to accidentally be putting strikes on the API Key if used.
                 # Instead, we'll use the streetview url! Invalid locations only return a black image.
@@ -473,9 +532,9 @@ continue."""), 0
 
         layer.commitChanges()
 
-    def build_url(self, y, x):
-        api_key = self.API_KEY
+    def build_url(self, api_key, y, x):
         url = f'https://maps.googleapis.com/maps/api/streetview/metadata?location={y},{x}&key={api_key}'
+        self.print(url)
         return url
 
     def get_gsv_json(self, url):
@@ -496,21 +555,24 @@ continue."""), 0
 
         return json_returned
 
-    def join_to_duplicate_source(self, source_layer, input_layer, field_name):
+    def join_to_duplicate_source(self, source_layer, input_layer, joining_field_name):
         self.print('Joining output to duplicate source')
 
-        # get field list, then remove field_name
+        source_fields = []
+        for field in source_layer.fields():
+            source_fields.append(field.name())
+
         fields_to_join = []
 
         for field in input_layer.fields():
-            if field.name() != field_name:
+            if field.name() not in source_fields:
                 fields_to_join.append(field.name())
 
         joined_layer = processing.run("native:joinattributestable", {
             'INPUT': source_layer,
-            'FIELD': field_name,
+            'FIELD': joining_field_name,
             'INPUT_2': input_layer,
-            'FIELD_2': field_name,
+            'FIELD_2': joining_field_name,
             'FIELDS_TO_COPY': fields_to_join,
             'METHOD': 1, 'DISCARD_NONMATCHING': False, 'PREFIX': '', 'OUTPUT': 'TEMPORARY_OUTPUT'})['OUTPUT']
 
@@ -526,9 +588,9 @@ continue."""), 0
             'OUTPUT': 'TEMPORARY_OUTPUT', 'OVERWRITE': True})['OUTPUT']
         print(table)
 
-        vlayer = QgsVectorLayer(table, "gsv_table", "ogr")
+        table_layer = QgsVectorLayer(table, "gsv_table", "ogr")
 
-        self.add_intermediate_layer(vlayer)
+        self.add_intermediate_layer(table_layer)
 
-        return vlayer
+        return table_layer
 
