@@ -84,7 +84,7 @@ class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
 
     # Testing mode set to 0 will let the plugin operate as expected.
 
-    testing = 1
+    testing = 0
     OUTPUT_TYPE = 'output type'
     FIELD_NAME = 'field_name'
     API_KEY = 'API_Key'
@@ -173,7 +173,7 @@ continue."""), 0
         #############
         output_type = self.parameterAsEnum(parameters, self.OUTPUT_TYPE, context)
         field_name = self.parameterAsString(parameters, self.FIELD_NAME, context)
-        api_key = self.parameterAsString(parameters, self.API_KEY, context)
+        api_key = self.parameterAsString(parameters, self.API_KEY, context).strip()
         disclaimer = self.parameterAsBoolean(parameters, self.DISCLAIMER, context)
 
         # Create layer from source so processes can read it.
@@ -226,7 +226,7 @@ continue."""), 0
         # dictionary, with keys matching the feature corresponding parameter
         # or output names.
 
-        print('Sending to selected destination.')
+        self.print('Sending to selected destination.')
         return {self.OUTPUT: dest_id}
 
     def name(self):
@@ -263,6 +263,14 @@ continue."""), 0
         """
         return 'Google API Tools'
 
+    def shortHelpString(self):
+        """
+        Returns a localised short helper string for the algorithm. This string
+        should provide a basic description about what the algorithm does and the
+        parameters and outputs associated with it..
+        """
+        return self.tr("Need a Google Maps API Key? <a href=\"https://developers.google.com/maps/documentation/javascript/get-api-key\">Click here!</a>")
+
     def tr(self, string):
         return QCoreApplication.translate('Processing', string)
 
@@ -292,7 +300,7 @@ continue."""), 0
             msg.setText(text)
         if info:
             msg.setInformativeText(info)
-        msg.setStandardButtons(QMessageBox.Ok)  # msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setStandardButtons(QMessageBox.Ok)
         msg.exec_()
 
     def get_field(self, input_layer, field_name):
@@ -315,60 +323,64 @@ continue."""), 0
         disclaimer: {disclaimer}
         """)
 
+        resume = True
+
         if disclaimer != 1:
             self.warning('You must acknowledge and consent to the disclaimer to continue!')
-        else:
+            resume = False
+
+        if resume:
+            field_validated = self.check_for_unique_values(layer, field_name)
+            self.print(f'field_validated = {field_validated}')
+
+            if field_validated is False:
+                self.warning('Selected field does not contain unique values.')
+                resume = False
+
+        if resume:
             valid_api_key = self.validate_api_key(api_key)
 
             if valid_api_key != 1:
                 self.warning('Invalid API key! Please provide a valid API key.')
+                resume = False
+
+        if resume:
+            # If not creating a duplicate layer, strip the fields down to selected join field
+            # 0     'Duplicate road layer with amended attributes',
+            # 1     'Joinable point layer'
+            # 2     'Joinable table'
+            if output_type > 0:
+                reduced_fields_layer = self.reduce_fields(layer, field_name)
+                local_input = reduced_fields_layer
             else:
-                self.print('Key is valid!')
+                local_input = layer
 
-                field_validated = self.check_for_unique_values(layer, field_name)
-                self.print(f'field_validated = {field_validated}')
+            # Create midpoints layer from local_input
+            midpoints_layer = self.create_midpoints_layer(local_input)
 
-                if field_validated:
-                    resume = True
-                else:
-                    self.warning('Selected field does not contain unique values.')
-                    resume = False
+            # Reproject layer to google readable projection
+            reprojected_layer = self.reproject_layer(midpoints_layer)
 
-                if resume:
-                    # If not creating a duplicate layer, strip the fields down to selected join field
-                    # 0     'Duplicate road layer with amended attributes',
-                    # 1     'Joinable point layer'
-                    # 2     'Joinable table'
-                    if output_type > 0:
-                        reduced_fields_layer = self.reduce_fields(layer, field_name)
-                        local_input = reduced_fields_layer
-                    else:
-                        local_input = layer
+            # Add geometry data. The next few steps is editing this layer.
+            geom_added_layer = self.add_geom_attributes(reprojected_layer)
 
-                    # Create midpoints layer from local_input
-                    midpoints_layer = self.create_midpoints_layer(local_input)
+            # Add Google Street View fields
+            gsv_layer = self.add_gsv_fields(geom_added_layer)
 
-                    # Reproject layer to google readable projection
-                    reprojected_layer = self.reproject_layer(midpoints_layer)
+            # Add GSV data
+            self.populate_gsv_fields(gsv_layer, api_key)
+            gsv_layer.setName('GSV_layer')
 
-                    # Add geometry data. The next few steps is editing this layer.
-                    geom_added_layer = self.add_geom_attributes(reprojected_layer)
-
-                    # Add Google Street View fields
-                    gsv_layer = self.add_gsv_fields(geom_added_layer)
-
-                    # Add GSV data
-                    self.populate_gsv_fields(gsv_layer, api_key)
-                    gsv_layer.setName('GSV_layer')
-
-                    if output_type == 0:  # Duplicated roads layer with added GSV data
-                        combined_layer = self.join_to_duplicate_source(source_layer=layer, input_layer=gsv_layer, joining_field_name=field_name)
-                        return combined_layer
-                    if output_type == 1:  # GSV point layer
-                        return gsv_layer
-                    if output_type == 2:  # GSV table only
-                        table = self.export_table(gsv_layer)
-                        return table
+            if output_type == 0:  # Duplicated roads layer with added GSV data
+                combined_layer = self.join_to_duplicate_source(source_layer=layer, input_layer=gsv_layer, joining_field_name=field_name)
+                return combined_layer
+            if output_type == 1:  # GSV point layer
+                return gsv_layer
+            if output_type == 2:  # GSV table only
+                table = self.export_table(gsv_layer)
+                return table
+        else:
+            return None
 
     def validate_api_key(self, api_key):
         # This uses an Street View API call at 0,0 to either validate the key and continue the process, or save the
@@ -400,7 +412,7 @@ continue."""), 0
         field_idx = input_layer.fields().indexFromName(field_name)
         unique = len(input_layer.uniqueValues(field_idx))
 
-        print(f'fc = {input_layer.featureCount()}\nuc = {unique}')
+        self.print(f'fc = {input_layer.featureCount()}\nuc = {unique}')
         if unique == input_layer.featureCount():
             return True
         else:
@@ -419,8 +431,8 @@ continue."""), 0
         self.print('reducing fields')
 
         field = self.get_field(input_layer, field_name)
-        print(input_layer)
-        print(field)
+        self.print(input_layer)
+        self.print(field)
         reduced = processing.run("native:refactorfields", {
             'INPUT': input_layer,
             # 'FIELDS_MAPPING': [{'expression': '"segid"', 'length': -1, 'name': 'segid', 'precision': 0, 'type': 6}],
@@ -468,7 +480,7 @@ continue."""), 0
         return reprojected_layer
 
     def add_geom_attributes(self, input_layer):
-        print('adding geometry attributes')
+        self.print('adding geometry attributes')
 
         geom_added_layer = processing.run("qgis:exportaddgeometrycolumns", {
             'INPUT': input_layer,
@@ -551,7 +563,7 @@ continue."""), 0
         # parse_json carries the dictionary for each call
         json_returned = json.loads(data)
 
-        print(f'JSON Returned:\n{json_returned}')
+        self.print(f'JSON Returned:\n{json_returned}')
 
         return json_returned
 
@@ -593,4 +605,3 @@ continue."""), 0
         self.add_intermediate_layer(table_layer)
 
         return table_layer
-
