@@ -269,7 +269,12 @@ continue."""), 0
         should provide a basic description about what the algorithm does and the
         parameters and outputs associated with it..
         """
-        return self.tr("Need a Google Maps API Key? <a href=\"https://developers.google.com/maps/documentation/javascript/get-api-key\">Click here!</a>")
+        return self.tr("Need a Google Maps API Key? <a href=\"https://developers.google.com/maps/documentation/"
+                       "javascript/get-api-key\">Click here!</a>\n"
+                       "For best results, it is recommended that the road layer you use be broken down block by block;"
+                       " the Vector overlay > Split with lines processing tool in QGIS can be used for this, but be"
+                       " sure to QA/QC the results and be familiar with the data before continuing."
+                       )
 
     def tr(self, string):
         return QCoreApplication.translate('Processing', string)
