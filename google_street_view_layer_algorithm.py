@@ -79,7 +79,7 @@ class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
     # key given is invalid, the status on the calls will always be REQUEST DENIED. A valid key may be used during
     # testing and will make legitimate API calls that could result in charges from Google; a very small sample layer is
     # strongly suggested; USE WITH CAUTION!
-    testing = 0
+    testing = 1
 
     # Get QGIS User directory
     user_path = QgsApplication.qgisSettingsDirPath()
@@ -661,14 +661,17 @@ continue."""), 0
         return output_layer
 
     def export_table(self, input_layer):
-        table = processing.run("native:exporttospreadsheet", {
-            'LAYERS': [input_layer],
-            'USE_ALIAS': False,
-            'FORMATTED_VALUES': False,
-            'OUTPUT': 'TEMPORARY_OUTPUT', 'OVERWRITE': True})['OUTPUT']
-        print(table)
+        self.print('Exporting to table.')
 
-        table_layer = QgsVectorLayer(table, "gsv_table", "ogr")
+        table_layer = QgsVectorLayer("NoGeometry", "gsv_table", "memory")
+
+        feats = [feat for feat in input_layer.getFeatures()]
+
+        table_layer_data = table_layer.dataProvider()
+        attr = input_layer.dataProvider().fields().toList()
+        table_layer_data.addAttributes(attr)
+        table_layer.updateFields()
+        table_layer_data.addFeatures(feats)
 
         output_layer = self.add_intermediate_layer(table_layer)
 
