@@ -79,7 +79,7 @@ class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
     # key given is invalid, the status on the calls will always be REQUEST DENIED. A valid key may be used during
     # testing and will make legitimate API calls that could result in charges from Google; a very small sample layer is
     # strongly suggested; USE WITH CAUTION!
-    testing = 0
+    testing = 1
 
     # Get QGIS User directory
     user_path = QgsApplication.qgisSettingsDirPath()
