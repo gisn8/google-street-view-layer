@@ -442,7 +442,7 @@ continue."""), 0
         else:
             req = f'https://maps.googleapis.com/maps/api/streetview/metadata?location=0,0&key={api_key}'
 
-            json_returned = self.get_gsv_json(req)
+            json_returned = self.get_gsv_json(req, fid=-1)
             status = json_returned['status']
 
             self.print(status)
@@ -589,7 +589,7 @@ continue."""), 0
             # Stop the algorithm if cancel button has been clicked
             api_url = self.build_url(api_key, y=feature['ycoord'], x=feature['xcoord'])
 
-            json_returned = self.get_gsv_json(api_url,fid=feature[f'{field_name}'])
+            json_returned = self.get_gsv_json(api_url, fid=feature[f'{field_name}'])
             feature['gsv_json'] = f'{json_returned}'
 
             feature['gsv_status'] = json_returned['status']
