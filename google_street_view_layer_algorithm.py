@@ -30,19 +30,19 @@ __copyright__ = '(C) 2022 by Nathan Saylor'
 
 __revision__ = '$Format:%H$'
 
-import qgis
-import requests
 import json
+import os
+from datetime import datetime
+from random import random
 
+import requests
 from PyQt5.QtCore import QVariant
 from PyQt5.QtWidgets import QMessageBox
 from qgis import processing
-from qgis.gui import QgsMessageBar
 from qgis.PyQt.QtCore import QCoreApplication
 from qgis._core import QgsProperty, QgsProcessingParameterEnum, QgsCoordinateReferenceSystem, QgsField, \
-    QgsProcessingParameterVectorLayer, QgsProject, QgsFeatureRequest, QgsProcessingParameterVectorDestination, \
-    QgsVectorLayer, QgsGeometry, QgsPointXY
-from qgis.core import (Qgis,
+    QgsProject, QgsFeatureRequest, QgsVectorLayer, QgsGeometry, QgsPointXY
+from qgis.core import (QgsApplication,
                        QgsProcessing,
                        QgsFeatureSink,
                        QgsProcessingParameterField,
@@ -50,8 +50,7 @@ from qgis.core import (Qgis,
                        QgsProcessingParameterBoolean,
                        QgsProcessingAlgorithm,
                        QgsProcessingParameterFeatureSource,
-                       QgsProcessingParameterFeatureSink,
-                       QgsMessageLog
+                       QgsProcessingParameterFeatureSink
                        )
 
 
@@ -82,12 +81,21 @@ class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
     # strongly suggested; USE WITH CAUTION!
     testing = 0
 
+    # Get QGIS User directory
+    user_path = QgsApplication.qgisSettingsDirPath()
+    logs_dir = f'{user_path}gsvl_logs'
+
+    # Will be populated down line
+    now = ''
+    log_dir = ''
+    log_file = ''
+
+    # User input variables
     INPUT = None
     OUTPUT_TYPE = 'output type'
     FIELD_NAME = 'field_name'
     API_KEY = 'API_Key'
     DISCLAIMER = 'disclaimer'
-    ##############
     OUTPUT = 'OUTPUT'
 
     def initAlgorithm(self, config):
@@ -134,6 +142,7 @@ class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
 
         disclaimer = QgsProcessingParameterBoolean(
                 self.DISCLAIMER,
+                # Formatted like this to avoid the text running off the form window when narrowed.
                 self.tr("""DISCLAIMER: 
 An API call will be used to validate the API key 
 and then for every feature or selected feature in 
@@ -177,6 +186,8 @@ continue."""), 0
         # Create layer from source so processes can read it.
         layer = source.materialize(QgsFeatureRequest())
 
+        self.init_logfiles()
+
         self.print(f"""
         source: {source}
         output_type: {output_type}
@@ -203,6 +214,7 @@ continue."""), 0
 
         # Compute the number of steps to display within the progress bar and
         # get features from source
+        self.print(source.featureCount())
         total = 100.0 / source.featureCount() if source.featureCount() else 0
         features = source.getFeatures()
 
@@ -216,6 +228,7 @@ continue."""), 0
 
             # Update the progress bar
             feedback.setProgress(int(current * total))
+            self.print(f'Export progress: {int(current * total)}%')
 
         # Return the results of the algorithm. In this case our only result is
         # the feature sink which contains the processed features, but some
@@ -271,7 +284,12 @@ continue."""), 0
                        "javascript/get-api-key\">Click here!</a>\n"
                        "For best results, it is recommended that the road layer you use be broken down block by block;"
                        " the Vector overlay > Split with lines processing tool in QGIS can be used for this, but be"
-                       " sure to QA/QC the results and be familiar with the data before continuing."
+                       " sure to QA/QC the results and be familiar with the data before continuing.\n"
+                       "\n"
+                       f"Should the process fail, review the log files found in"
+                       f" <a href=\"file:///{self.logs_dir}\">{self.logs_dir}</a>."
+                       f" A Geopackage with the processed layers is included and may save you from unnecessary API"
+                       f" calls."
                        )
 
     def tr(self, string):
@@ -284,9 +302,33 @@ continue."""), 0
     # PROCESSING FUNCTIONS #
     ########################
 
+    def init_logfiles(self):
+        self.now = datetime.now().strftime("%Y-%m-%d_T%H_%M_%S")
+
+        # Create directory for log files. We don't want in plugin folder in the even it is uninstalled or reinstalled.
+        if not os.path.exists(self.logs_dir):
+            os.makedirs(self.logs_dir)
+
+        # Create logging directory for this session.
+        self.log_dir = f'{self.logs_dir}/{self.now}'
+        if not os.path.exists(self.log_dir):
+            os.makedirs(self.log_dir)
+
+        self.log_file = f'{self.log_dir}/log.txt'
+
+        # Creates the log_file
+        f = open(self.log_file, "x")
+        f.close()
+
     def print(self, msg):
+
+        f = open(self.log_file, "a")
+        ts = datetime.now().strftime("%H:%M:%S")
+        f.write(f'\n{ts} - {msg}')
+        f.close()
+
         if self.testing == 1:
-            print(msg)
+            print(f'{ts} - {msg}')
 
     def warning(self, msg):
         self.msgbox(title='ATTENTION', icon=QMessageBox.Warning, text=msg)
@@ -314,11 +356,10 @@ continue."""), 0
 
     def run_process(self, layer, output_type, field_name, api_key, disclaimer):
 
-        self.print(layer.featureCount())
-
         self.print(f"""
         source: {layer}
         source_name: {layer.sourceName()}
+        feature count: {layer.featureCount()}
         output_type: {output_type}
         field: {field_name}
         api_key: {api_key}
@@ -369,10 +410,11 @@ continue."""), 0
 
             # Add Google Street View fields
             gsv_layer = self.add_gsv_fields(geom_added_layer)
+            # Changes the name in the TOC
+            gsv_layer.setName('gsv_layer')
 
             # Add GSV data
-            self.populate_gsv_fields(gsv_layer, api_key)
-            gsv_layer.setName('GSV_layer')
+            self.populate_gsv_fields(gsv_layer, api_key, field_name)
 
             if output_type == 0:  # Duplicated roads layer with added GSV data
                 combined_layer = self.join_to_duplicate_source(source_layer=layer, input_layer=gsv_layer, joining_field_name=field_name)
@@ -422,20 +464,41 @@ continue."""), 0
             return False
 
     def add_intermediate_layer(self, input_layer):
+        output_gpkg = f'{self.log_dir}/outputs.gpkg'
+
+        # The input_layer may not necessarily have a name assigned.
         try:
-            self.print(f'Adding {input_layer.name()}')
+            layer_name = input_layer.name()
         except:
-            self.print('Adding new layer')
+            input_layer.setName(f'new_layer_{int(random()*10000)}')
+            layer_name = input_layer.name()
+
+        self.print(f'Sending {layer_name} to {output_gpkg}.')
+
+        processing.run("native:package", {
+            'LAYERS': [input_layer],
+            'OUTPUT': output_gpkg,
+            'OVERWRITE': False,
+            'SAVE_STYLES': False,
+            'SAVE_METADATA': False,
+            'SELECTED_FEATURES_ONLY': False})
+
+        output_layer_path = f'ogr:dbname=\'{output_gpkg}\' table="{layer_name}" (geom)'
+
+        output_layer = QgsVectorLayer(f'{output_gpkg}|layername={layer_name}', layer_name, 'ogr')
 
         if self.testing == 1:
-            QgsProject.instance().addMapLayer(input_layer)
+            QgsProject.instance().addMapLayer(output_layer)
+            self.print(f'Adding {layer_name}')
+
+        return output_layer
 
     def reduce_fields(self, input_layer, field_name):
         self.print('reducing fields')
 
         field = self.get_field(input_layer, field_name)
-        self.print(input_layer)
-        self.print(field)
+        self.print(f'input_layer obj: {input_layer}')
+        self.print(f'field obj: {field}')
         reduced = processing.run("native:refactorfields", {
             'INPUT': input_layer,
             # 'FIELDS_MAPPING': [{'expression': '"segid"', 'length': -1, 'name': 'segid', 'precision': 0, 'type': 6}],
@@ -449,9 +512,9 @@ continue."""), 0
             'OUTPUT': 'TEMPORARY_OUTPUT'
         })['OUTPUT']
 
-        self.add_intermediate_layer(reduced)
+        output_layer = self.add_intermediate_layer(reduced)
 
-        return reduced
+        return output_layer
 
     def create_midpoints_layer(self, input_layer):
         self.print('creating midpoints layer')
@@ -465,9 +528,9 @@ continue."""), 0
             'DISTANCE': QgsProperty.fromExpression('length($geometry)/2'),
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT})['OUTPUT']
 
-        self.add_intermediate_layer(midpoints_layer)
+        output_layer = self.add_intermediate_layer(midpoints_layer)
 
-        return midpoints_layer
+        return output_layer
 
     def reproject_layer(self, input_layer):
         self.print('reprojecting layer')
@@ -478,20 +541,20 @@ continue."""), 0
             # 'OPERATION': '+proj=pipeline +step +proj=unitconvert +xy_in=us-ft +xy_out=m +step +inv +proj=lcc +lat_0=39.6666666666667 +lon_0=-82.5 +lat_1=41.7 +lat_2=40.4333333333333 +x_0=600000 +y_0=0 +ellps=GRS80 +step +proj=hgridshift +grids=ohhpgn.gsb +step +proj=unitconvert +xy_in=rad +xy_out=deg',
             'OUTPUT': 'TEMPORARY_OUTPUT'})['OUTPUT']
 
-        self.add_intermediate_layer(reprojected_layer)
+        output_layer = self.add_intermediate_layer(reprojected_layer)
 
-        return reprojected_layer
+        return output_layer
 
     def add_geom_attributes(self, input_layer):
-        self.print('adding geometry attributes')
+        self.print('Adding geometry attributes')
 
         geom_added_layer = processing.run("qgis:exportaddgeometrycolumns", {
             'INPUT': input_layer,
             'CALC_METHOD': 0, 'OUTPUT': 'TEMPORARY_OUTPUT'})['OUTPUT']
 
-        self.add_intermediate_layer(geom_added_layer)
+        output_layer = self.add_intermediate_layer(geom_added_layer)
 
-        return geom_added_layer
+        return output_layer
 
     def add_gsv_fields(self, input_layer):
         self.print(f'Adding gsv fields.')
@@ -507,11 +570,12 @@ continue."""), 0
         ])
         input_layer.updateFields()
 
-        self.add_intermediate_layer(input_layer)
+        # This function operating on existing and not outputting a new layer.
+        # output_layer = self.add_intermediate_layer(input_layer)
 
         return input_layer
 
-    def populate_gsv_fields(self, layer, api_key):
+    def populate_gsv_fields(self, layer, api_key, field_name):
         self.print('Populating GSV fields')
 
         layer.startEditing()
@@ -524,7 +588,7 @@ continue."""), 0
             # Stop the algorithm if cancel button has been clicked
             api_url = self.build_url(api_key, y=feature['ycoord'], x=feature['xcoord'])
 
-            json_returned = self.get_gsv_json(api_url)
+            json_returned = self.get_gsv_json(api_url,fid=feature[f'{field_name}'])
             feature['gsv_json'] = f'{json_returned}'
 
             feature['gsv_status'] = json_returned['status']
@@ -552,7 +616,7 @@ continue."""), 0
         self.print(url)
         return url
 
-    def get_gsv_json(self, url):
+    def get_gsv_json(self, url, fid):
         # The first piece of info we want is the "status". There are three returns possible:
         # GSV found: "status" : "OK"
         # GSV not found: "status" : "ZERO_RESULTS"
@@ -566,7 +630,7 @@ continue."""), 0
         # parse_json carries the dictionary for each call
         json_returned = json.loads(data)
 
-        self.print(f'JSON Returned:\n{json_returned}')
+        self.print(f'JSON returned for feature {fid}: {json_returned}')
 
         return json_returned
 
@@ -591,9 +655,9 @@ continue."""), 0
             'FIELDS_TO_COPY': fields_to_join,
             'METHOD': 1, 'DISCARD_NONMATCHING': False, 'PREFIX': '', 'OUTPUT': 'TEMPORARY_OUTPUT'})['OUTPUT']
 
-        self.add_intermediate_layer(joined_layer)
+        output_layer = self.add_intermediate_layer(joined_layer)
 
-        return joined_layer
+        return output_layer
 
     def export_table(self, input_layer):
         table = processing.run("native:exporttospreadsheet", {
@@ -605,6 +669,6 @@ continue."""), 0
 
         table_layer = QgsVectorLayer(table, "gsv_table", "ogr")
 
-        self.add_intermediate_layer(table_layer)
+        output_layer = self.add_intermediate_layer(table_layer)
 
-        return table_layer
+        return output_layer
