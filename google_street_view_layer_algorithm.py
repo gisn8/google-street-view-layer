@@ -73,18 +73,16 @@ class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
     # used when calling the algorithm from another algorithm, or when
     # calling from the QGIS console.
 
-    INPUT = None
-    ##############
+    # Testing mode set to 0 will let the plugin operate as expected.
     # Testing mode set to 1 will:
     # - Print to the console the process functions being accessed, and important variable values along the way.
     # - Unless a valid API key is entered, will assume anything entered under 39 characters is initially valid; if
     # key given is invalid, the status on the calls will always be REQUEST DENIED. A valid key may be used during
     # testing and will make legitimate API calls that could result in charges from Google; a very small sample layer is
     # strongly suggested; USE WITH CAUTION!
-
-    # Testing mode set to 0 will let the plugin operate as expected.
-
     testing = 0
+
+    INPUT = None
     OUTPUT_TYPE = 'output type'
     FIELD_NAME = 'field_name'
     API_KEY = 'API_Key'
