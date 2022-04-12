@@ -318,6 +318,7 @@ continue."""), 0
 
         # Creates the log_file
         f = open(self.log_file, "x")
+        f.write(f'Began processing at {self.now}')
         f.close()
 
     def print(self, msg):
