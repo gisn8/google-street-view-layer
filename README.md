@@ -4,6 +4,8 @@ A QGIS processing plugin that uses your road layer, and creates a new or joinabl
   
 **Google API Key required!**
 
+For best results, if not already, it is advised your road layer be broken down at least block by block. If necessary, the Vector overlay > Split with lines QGIS processing tool should work for this by selecting your initial road layer for both inputs. Be sure you QA/QC and get familiar with the result before proceeding.
+
 For testing:
 
 Among the initial variables set in google_street_view_layer_algorithm.py is "testing = 0".
