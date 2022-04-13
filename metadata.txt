@@ -12,7 +12,7 @@ email=gisn8@yahoo.com
 
 about=A QGIS plugin that uses your road layer, and creates a layer or table with the most recent Google Street View capture data. Google API Key required!
 
-tracker=http://bugs
+tracker=https://github.com/gisn8/google-street-view-layer/issues
 repository=https://github.com/gisn8/google-street-view-layer
 # End of mandatory metadata
 
