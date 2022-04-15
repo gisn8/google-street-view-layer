@@ -79,7 +79,7 @@ class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
     # key given is invalid, the status on the calls will always be REQUEST DENIED. A valid key may be used during
     # testing and will make legitimate API calls that could result in charges from Google; a very small sample layer is
     # strongly suggested; USE WITH CAUTION!
-    testing = 1
+    testing = 0
 
     # Get QGIS User directory
     user_path = QgsApplication.qgisSettingsDirPath()
@@ -327,8 +327,8 @@ continue."""), 0
         f.write(f'\n{ts} - {msg}')
         f.close()
 
-        # if self.testing == 1:
-        #     print(f'{ts} - {msg}')
+        if self.testing == 1:
+            print(f'{ts} - {msg}')
 
     def warning(self, msg):
         self.msgbox(title='ATTENTION', icon=QMessageBox.Warning, text=msg)
