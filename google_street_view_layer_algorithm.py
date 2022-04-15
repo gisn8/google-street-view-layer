@@ -79,7 +79,7 @@ class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
     # key given is invalid, the status on the calls will always be REQUEST DENIED. A valid key may be used during
     # testing and will make legitimate API calls that could result in charges from Google; a very small sample layer is
     # strongly suggested; USE WITH CAUTION!
-    testing = 0
+    testing = 1
 
     # Get QGIS User directory
     user_path = QgsApplication.qgisSettingsDirPath()
@@ -197,7 +197,7 @@ continue."""), 0
         layer: {layer}
         """)
 
-        source = self.run_process(layer, output_type, field_name, api_key, disclaimer)
+        source = self.run_process(layer, output_type, field_name, api_key, disclaimer, feedback)
 
         # This is to catch invalid CRS on table outputs. Layer CRS outputs should end up being the same otherwise.
         if source.sourceCrs() != layer.crs():
@@ -228,7 +228,6 @@ continue."""), 0
 
             # Update the progress bar
             feedback.setProgress(int(current * total))
-            self.print(f'Export progress: {int(current * total)}%')
 
         # Return the results of the algorithm. In this case our only result is
         # the feature sink which contains the processed features, but some
@@ -328,8 +327,8 @@ continue."""), 0
         f.write(f'\n{ts} - {msg}')
         f.close()
 
-        if self.testing == 1:
-            print(f'{ts} - {msg}')
+        # if self.testing == 1:
+        #     print(f'{ts} - {msg}')
 
     def warning(self, msg):
         self.msgbox(title='ATTENTION', icon=QMessageBox.Warning, text=msg)
@@ -355,7 +354,7 @@ continue."""), 0
 
         return field
 
-    def run_process(self, layer, output_type, field_name, api_key, disclaimer):
+    def run_process(self, layer, output_type, field_name, api_key, disclaimer, feedback):
 
         self.print(f"""
         source: {layer}
@@ -415,7 +414,7 @@ continue."""), 0
             gsv_layer.setName('gsv_layer')
 
             # Add GSV data
-            self.populate_gsv_fields(gsv_layer, api_key, field_name)
+            self.populate_gsv_fields(gsv_layer, api_key, field_name, feedback)
 
             if output_type == 0:  # Duplicated roads layer with added GSV data
                 combined_layer = self.join_to_duplicate_source(source_layer=layer, input_layer=gsv_layer, joining_field_name=field_name)
@@ -576,17 +575,22 @@ continue."""), 0
 
         return input_layer
 
-    def populate_gsv_fields(self, layer, api_key, field_name):
+    def populate_gsv_fields(self, layer, api_key, field_name, feedback):
         self.print('Populating GSV fields')
 
         layer.startEditing()
 
-        # Build URL
-        # Fetch and decipher JSON from URL
-        # Populate GSV fields
+        # Compute the number of steps to display within the progress bar and
+        # get features from source
+        self.print(f"FeatureCount to populate GSV fields: {layer.featureCount()}")
+        total = 100.0 / layer.featureCount() if layer.featureCount() else 0
+
         features = layer.getFeatures('1=1')
-        for feature in features:
+        for current, feature in enumerate(features):
             # Stop the algorithm if cancel button has been clicked
+            if feedback.isCanceled():
+                break
+
             api_url = self.build_url(api_key, y=feature['ycoord'], x=feature['xcoord'])
 
             json_returned = self.get_gsv_json(api_url, fid=feature[f'{field_name}'])
@@ -607,6 +611,10 @@ continue."""), 0
                 # useful whether or not we have the proper pano_id.
                 # Example: https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=40.64769463488166,-83.60925155578865
                 feature['gsv_url'] = f"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={feature['ycoord']},{feature['xcoord']}"
+
+            # Update the progress bar
+            feedback.setProgress(int(current * total))
+            self.print(f'Export progress: {int(current * total)}%')
 
             layer.updateFeature(feature)
 
