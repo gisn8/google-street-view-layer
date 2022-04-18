@@ -22,6 +22,4 @@ key given is invalid, the status on the calls will always be REQUEST DENIED. A v
 testing and will make legitimate API calls that could result in charges from Google; a very small sample layer is
 strongly suggested; USE WITH CAUTION!
 
-### BUGS
-
-Please review or submit to the Issues page at https://github.com/gisn8/google-street-view-layer/issues.
+Please review or submit any issues discovered to https://github.com/gisn8/google-street-view-layer/issues.
