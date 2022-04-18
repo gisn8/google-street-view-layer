@@ -68,12 +68,14 @@ class GoogleStreetViewLayerPlugin(object):
             QIcon(icon),
             u"Google Street View Layer", self.iface.mainWindow())
         self.action.triggered.connect(self.run)
-        self.iface.addPluginToMenu(u"&Google API Tools", self.action)
+        # self.iface.addPluginToMenu(u"&Google API Tools", self.action)
+        self.iface.addPluginToWebMenu(u"&Google API Tools", self.action)
         self.iface.addToolBarIcon(self.action)
 
     def unload(self):
         QgsApplication.processingRegistry().removeProvider(self.provider)
-        self.iface.removePluginMenu(u"&Google API Tools", self.action)
+        # self.iface.removePluginMenu(u"&Google API Tools", self.action)
+        self.iface.removePluginWebMenu(u"&Google API Tools", self.action)
         self.iface.removeToolBarIcon(self.action)
 
     def run(self):
