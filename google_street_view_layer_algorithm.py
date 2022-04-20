@@ -169,6 +169,8 @@ continue."""), 0
     def processAlgorithm(self, parameters, context, feedback):
         # Process is set up and outputted here, but the processing itself is conducted in the run_process function.
 
+        self.feedback = feedback
+
         # Retrieve the feature source and sink. The 'dest_id' variable is used
         # to uniquely identify the feature sink, and must be included in the
         # dictionary returned by the processAlgorithm function.
@@ -280,7 +282,6 @@ continue."""), 0
     # FEEDBACK TOOLS #
     ##################
     def print(self, msg):
-
         f = open(self.log_file, "a")
         ts = datetime.now().strftime("%H:%M:%S")
         f.write(f'\n{ts} - {msg}')
@@ -289,9 +290,12 @@ continue."""), 0
         if self.testing == 1:
             print(f'{ts} - {msg}')
 
+        self.feedback.pushInfo(f'{ts} - {msg}')
+
     def warning(self, msg):
-        self.msgbox(title='ATTENTION', icon=QMessageBox.Warning, text=msg)
-        self.print(msg)
+        # This is causing Windows instances to crash. Struggling to find a messagebar solution.
+        # self.msgbox(title='ATTENTION', icon=QMessageBox.Warning, text=msg)
+        self.print('ATTENTION: ' + msg)
 
     def msgbox(self, title=None, icon=None, text=None, info=None):
         msg = QMessageBox()

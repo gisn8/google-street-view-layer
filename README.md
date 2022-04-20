@@ -16,7 +16,8 @@ Among the initial variables set in google_street_view_layer_algorithm.py is "tes
 Testing mode set to 0 will let the plugin operate as expected. 
 
 Testing mode set to 1 will:
-- Print to the console the process functions being accessed, and important variable values along the way.
+- Print to the console the process functions being accessed, and important variable values along the way. At this time, 
+these outputs are the same as those displayed in the Log window and sent to the logfile.
 - Unless a valid API key is entered, will assume anything entered under 39 characters is initially valid; if
 key given is invalid, the status on the calls will always be REQUEST DENIED. A valid key may be used during
 testing and will make legitimate API calls that could result in charges from Google; a very small sample layer is
