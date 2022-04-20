@@ -40,6 +40,7 @@ from random import random
 
 from PyQt5.QtCore import QVariant
 from PyQt5.QtWidgets import QMessageBox
+from osgeo import ogr
 
 from qgis import processing
 from qgis.PyQt.QtCore import QCoreApplication
@@ -69,7 +70,7 @@ class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
     # key given is invalid, the status on the calls will always be REQUEST DENIED. A valid key may be used during
     # testing and will make legitimate API calls that could result in charges from Google; a very small sample layer is
     # strongly suggested; USE WITH CAUTION!
-    testing = 0
+    testing = 1
 
     # Get QGIS User directory for log files and intermediate layer storage.
     # This needs called now as the help panel needs to reference this location before the user begins processing.
@@ -80,9 +81,10 @@ class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
     now = ''
     log_dir = ''
     log_file = ''
+    output_gpkg = ''
 
     # User input variables
-    INPUT = None
+    INPUT = 'INPUT'
     OUTPUT_TYPE = 'OUTPUT_TYPE'
     FIELD_NAME = 'FIELD_NAME'
     API_KEY = 'API_KEY'
@@ -321,35 +323,25 @@ continue."""), 0
         return url
 
     def add_intermediate_layer(self, input_layer):
-        output_gpkg = f'{self.log_dir}/outputs.gpkg'
+        # output_gpkg = f'{self.log_dir}/outputs.gpkg'
 
         # Found in some early cases the input_layer may not necessarily have a name assigned.
-        try:
-            layer_name = input_layer.name()
-        except:
-            # To avoid possible conflicts
-            input_layer.setName(f'new_layer_{int(random()*10000)}')
-            layer_name = input_layer.name()
+        # try:
+        #     layer_name = input_layer.name()
+        # except:
+        #     # To avoid possible conflicts
+        #     input_layer.setName(f'new_layer_{int(random()*10000)}')
+        #     layer_name = input_layer.name()
 
-        self.print(f'Sending {layer_name} to {output_gpkg}.')
+        self.print(f'Sending {input_layer.name()} to {self.output_gpkg}.')
 
         processing.run("native:package", {
             'LAYERS': [input_layer],
-            'OUTPUT': output_gpkg,
+            'OUTPUT': self.output_gpkg,
             'OVERWRITE': False,
             'SAVE_STYLES': False,
             'SAVE_METADATA': False,
             'SELECTED_FEATURES_ONLY': False})
-
-        output_layer_path = f'ogr:dbname=\'{output_gpkg}\' table="{layer_name}" (geom)'
-
-        output_layer = QgsVectorLayer(f'{output_gpkg}|layername={layer_name}', layer_name, 'ogr')
-
-        if self.testing == 1:
-            QgsProject.instance().addMapLayer(output_layer)
-            self.print(f'Adding {layer_name}')
-
-        return output_layer
 
     ##############
     # PROCESSING #
@@ -367,6 +359,8 @@ continue."""), 0
             os.makedirs(self.log_dir)
 
         self.log_file = f'{self.log_dir}/log.txt'
+
+        self.output_gpkg = f'{self.log_dir}/outputs.gpkg'
 
         # Creates the log_file
         f = open(self.log_file, "x")
@@ -440,12 +434,18 @@ continue."""), 0
 
             if output_type == 0:  # Duplicated roads layer with added GSV data
                 combined_layer = self.join_to_duplicate_source(source_layer=layer, input_layer=gsv_layer, joining_field_name=field_name)
-                return combined_layer
+                final_output = combined_layer
             if output_type == 1:  # GSV point layer
-                return gsv_layer
+                final_output = gsv_layer
             if output_type == 2:  # GSV table only
                 table = self.export_table(gsv_layer)
-                return table
+                final_output = table
+
+            # Adds stored outputs to map in testing mode.
+            self.add_gpkg_layers()
+
+            return final_output
+
         else:
             return None
 
@@ -535,9 +535,9 @@ continue."""), 0
             'TARGET_CRS': QgsCoordinateReferenceSystem('EPSG:4326'),
             'OUTPUT': 'TEMPORARY_OUTPUT'})['OUTPUT']
 
-        output_layer = self.add_intermediate_layer(reprojected_layer)
+        self.add_intermediate_layer(reprojected_layer)
 
-        return output_layer
+        return reprojected_layer
 
     def add_geom_attributes(self, input_layer):
         self.print('Adding geometry attributes')
@@ -546,9 +546,9 @@ continue."""), 0
             'INPUT': input_layer,
             'CALC_METHOD': 0, 'OUTPUT': 'TEMPORARY_OUTPUT'})['OUTPUT']
 
-        output_layer = self.add_intermediate_layer(geom_added_layer)
+        self.add_intermediate_layer(geom_added_layer)
 
-        return output_layer
+        return geom_added_layer
 
     def add_gsv_fields(self, input_layer):
         self.print(f'Adding gsv fields.')
@@ -565,7 +565,7 @@ continue."""), 0
         input_layer.updateFields()
 
         # This function operating on existing and not outputting a new layer.
-        # output_layer = self.add_intermediate_layer(input_layer)
+        # self.add_intermediate_layer(input_layer)
 
         return input_layer
 
@@ -655,9 +655,9 @@ continue."""), 0
             'FIELDS_TO_COPY': fields_to_join,
             'METHOD': 1, 'DISCARD_NONMATCHING': False, 'PREFIX': '', 'OUTPUT': 'TEMPORARY_OUTPUT'})['OUTPUT']
 
-        output_layer = self.add_intermediate_layer(joined_layer)
+        self.add_intermediate_layer(joined_layer)
 
-        return output_layer
+        return joined_layer
 
     def export_table(self, input_layer):
         self.print('Exporting to table.')
@@ -672,6 +672,15 @@ continue."""), 0
         table_layer.updateFields()
         table_layer_data.addFeatures(feats)
 
-        output_layer = self.add_intermediate_layer(table_layer)
+        self.add_intermediate_layer(table_layer)
 
-        return output_layer
+        return table_layer
+
+    def add_gpkg_layers(self):
+        if self.testing == 1:
+            layer_names = [l.GetName() for l in ogr.Open(self.output_gpkg)]
+
+            for layer_name in layer_names:
+                self.print(f'Adding {layer_name} to map')
+                layer = QgsVectorLayer(self.output_gpkg + f'|layername={layer_name}', layer_name, 'ogr')
+                QgsProject.instance().addMapLayer(layer)
