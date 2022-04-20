@@ -323,16 +323,6 @@ continue."""), 0
         return url
 
     def add_intermediate_layer(self, input_layer):
-        # output_gpkg = f'{self.log_dir}/outputs.gpkg'
-
-        # Found in some early cases the input_layer may not necessarily have a name assigned.
-        # try:
-        #     layer_name = input_layer.name()
-        # except:
-        #     # To avoid possible conflicts
-        #     input_layer.setName(f'new_layer_{int(random()*10000)}')
-        #     layer_name = input_layer.name()
-
         self.print(f'Sending {input_layer.name()} to {self.output_gpkg}.')
 
         processing.run("native:package", {
