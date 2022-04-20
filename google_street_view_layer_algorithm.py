@@ -507,9 +507,9 @@ continue."""), 0
             'OUTPUT': 'TEMPORARY_OUTPUT'
         })['OUTPUT']
 
-        output_layer = self.add_intermediate_layer(reduced)
+        self.add_intermediate_layer(reduced)
 
-        return output_layer
+        return reduced
 
     def create_midpoints_layer(self, input_layer):
         self.print('Creating midpoints layer')
@@ -522,10 +522,10 @@ continue."""), 0
             'INPUT': input_layer,
             'DISTANCE': QgsProperty.fromExpression('length($geometry)/2'),
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT})['OUTPUT']
+        print('here')
+        self.add_intermediate_layer(midpoints_layer)
 
-        output_layer = self.add_intermediate_layer(midpoints_layer)
-
-        return output_layer
+        return midpoints_layer
 
     def reproject_layer(self, input_layer):
         self.print('Reprojecting layer')
