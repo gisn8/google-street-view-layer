@@ -322,7 +322,7 @@ continue."""), 0
         self.print(f'URL call: {url}')
         return url
 
-    def add_intermediate_layer(self, input_layer):
+    def add_intermediate_layer_to_gpkg(self, input_layer):
         self.print(f'Sending {input_layer.name()} to {self.output_gpkg}.')
 
         processing.run("native:package", {
@@ -497,7 +497,7 @@ continue."""), 0
             'OUTPUT': 'TEMPORARY_OUTPUT'
         })['OUTPUT']
 
-        self.add_intermediate_layer(reduced)
+        self.add_intermediate_layer_to_gpkg(reduced)
 
         return reduced
 
@@ -513,7 +513,7 @@ continue."""), 0
             'DISTANCE': QgsProperty.fromExpression('length($geometry)/2'),
             'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT})['OUTPUT']
 
-        self.add_intermediate_layer(midpoints_layer)
+        self.add_intermediate_layer_to_gpkg(midpoints_layer)
 
         return midpoints_layer
 
@@ -525,7 +525,7 @@ continue."""), 0
             'TARGET_CRS': QgsCoordinateReferenceSystem('EPSG:4326'),
             'OUTPUT': 'TEMPORARY_OUTPUT'})['OUTPUT']
 
-        self.add_intermediate_layer(reprojected_layer)
+        self.add_intermediate_layer_to_gpkg(reprojected_layer)
 
         return reprojected_layer
 
@@ -536,7 +536,7 @@ continue."""), 0
             'INPUT': input_layer,
             'CALC_METHOD': 0, 'OUTPUT': 'TEMPORARY_OUTPUT'})['OUTPUT']
 
-        self.add_intermediate_layer(geom_added_layer)
+        self.add_intermediate_layer_to_gpkg(geom_added_layer)
 
         return geom_added_layer
 
@@ -555,7 +555,7 @@ continue."""), 0
         input_layer.updateFields()
 
         # This function operating on existing and not outputting a new layer.
-        # self.add_intermediate_layer(input_layer)
+        # self.add_intermediate_layer_to_gpkg(input_layer)
 
         return input_layer
 
@@ -645,7 +645,7 @@ continue."""), 0
             'FIELDS_TO_COPY': fields_to_join,
             'METHOD': 1, 'DISCARD_NONMATCHING': False, 'PREFIX': '', 'OUTPUT': 'TEMPORARY_OUTPUT'})['OUTPUT']
 
-        self.add_intermediate_layer(joined_layer)
+        self.add_intermediate_layer_to_gpkg(joined_layer)
 
         return joined_layer
 
@@ -662,7 +662,7 @@ continue."""), 0
         table_layer.updateFields()
         table_layer_data.addFeatures(feats)
 
-        self.add_intermediate_layer(table_layer)
+        self.add_intermediate_layer_to_gpkg(table_layer)
 
         return table_layer
 
