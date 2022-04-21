@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="plugins/google_street_view_layer/" >
+    <file>icon.png</file>
+  </qresource>
+</RCC>

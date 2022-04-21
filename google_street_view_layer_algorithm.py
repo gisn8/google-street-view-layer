@@ -43,6 +43,7 @@ from PyQt5.QtWidgets import QMessageBox
 from osgeo import ogr
 
 from qgis import processing
+from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtCore import QCoreApplication
 from qgis._core import QgsProperty, QgsProcessingParameterEnum, QgsCoordinateReferenceSystem, QgsField, \
     QgsProject, QgsFeatureRequest, QgsVectorLayer, QgsGeometry, QgsPointXY
@@ -57,6 +58,8 @@ from qgis.core import (QgsApplication,
                        QgsProcessingParameterFeatureSink
                        )
 
+# Pycharm thinks not used; it is.
+from . import resources
 
 class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
     # Constants used to refer to parameters and outputs. They will be
@@ -90,6 +93,13 @@ class GoogleStreetViewLayerAlgorithm(QgsProcessingAlgorithm):
     API_KEY = 'API_KEY'
     DISCLAIMER = 'DISCLAIMER'
     OUTPUT = 'OUTPUT'
+
+    ##############################
+    # PROCESSING TOOLS LIST ICON #
+    ##############################
+    def icon(self):
+        # https://gis.stackexchange.com/questions/382688/changing-the-processing-plugin-icon-qgis
+        return QIcon(':/plugins/google_street_view_layer/icon.png')
 
     #################################
     # REQUIRED PROCESSING FUNCTIONS #
