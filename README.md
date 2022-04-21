@@ -24,3 +24,5 @@ testing and will make legitimate API calls that could result in charges from Goo
 strongly suggested; USE WITH CAUTION!
 
 Please review or submit any issues discovered to https://github.com/gisn8/google-street-view-layer/issues.
+
+*Tested on Linux Mint and Windows 10.*
