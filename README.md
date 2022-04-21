@@ -25,4 +25,4 @@ strongly suggested; USE WITH CAUTION!
 
 Please review or submit any issues discovered to https://github.com/gisn8/google-street-view-layer/issues.
 
-*Tested on Linux Mint and Windows 10.*
+*Tested on QGIS 3.16 and up on Linux Mint and Windows 10.*
