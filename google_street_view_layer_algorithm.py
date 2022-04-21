@@ -36,7 +36,6 @@ import os
 import requests
 
 from datetime import datetime
-from random import random
 
 from PyQt5.QtCore import QVariant
 from PyQt5.QtWidgets import QMessageBox
@@ -197,12 +196,12 @@ continue."""), 0
         self.init_logfiles()
 
         self.print(f"""Inputs: 
-        source: {source}
+        source (obj): {source}
         output_type: {output_type}
         field_name: {field_name}
         api_key: {api_key}
         disclaimer: {disclaimer}
-        layer: {layer}
+        layer (obj): {layer}
         """)
 
         source = self.run_process(layer, output_type, field_name, api_key, disclaimer, feedback)
@@ -291,21 +290,25 @@ continue."""), 0
     ##################
     # FEEDBACK TOOLS #
     ##################
+    def ts(self):
+        # Timestamp function
+        return datetime.now().strftime("%H:%M:%S")
+
     def print(self, msg):
         f = open(self.log_file, "a")
-        ts = datetime.now().strftime("%H:%M:%S")
-        f.write(f'\n{ts} - {msg}')
+        f.write(f'\n{self.ts()} - {msg}')
         f.close()
 
         if self.testing == 1:
-            print(f'{ts} - {msg}')
+            print(f'{self.ts()} - {msg}')
 
-        self.feedback.pushInfo(f'{ts} - {msg}')
+        self.feedback.pushInfo(f'{self.ts()} - {msg}')
 
     def warning(self, msg):
         # This is causing Windows instances to crash. Struggling to find a messagebar solution.
         # self.msgbox(title='ATTENTION', icon=QMessageBox.Warning, text=msg)
-        self.print('ATTENTION: ' + msg)
+        self.print(f'ATTENTION: {msg}')
+        self.feedback.pushWarning(f'ATTENTION: {msg}')
 
     def msgbox(self, title=None, icon=None, text=None, info=None):
         msg = QMessageBox()
